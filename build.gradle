@@ -1,6 +1,7 @@
 // 根项目配置
 plugins {
     id 'java'
+    id 'base'
 }
 
 allprojects {
@@ -40,3 +41,158 @@ tasks.register('buildAll') {
     description = 'Build all modules'
     dependsOn subprojects*.build
 }
+
+// 自动打包发行版
+tasks.register('dist') {
+    group = 'distribution'
+    description = 'Create distribution package'
+
+    dependsOn build
+
+    doLast {
+        // 创建发行目录
+        def distDir = file("dist")
+        distDir.deleteDir()
+        distDir.mkdirs()
+
+        // 复制 JAR 文件
+        copy {
+            from "server/build/libs/forward-server-${version}.jar"
+            into "dist/libs/"
+        }
+        copy {
+            from "agent/build/libs/forward-agent-${version}.jar"
+            into "dist/libs/"
+        }
+
+        // 复制配置文件模板
+        copy {
+            from "server/src/main/resources/config/server-config.yaml"
+            into "dist/config/"
+            rename { 'server.yaml' }
+        }
+        copy {
+            from "agent/src/main/resources/config/agent-config.yaml"
+            into "dist/config/"
+            rename { 'agent.yaml' }
+        }
+
+        // 创建启动脚本
+        def startBat = file("dist/start.bat")
+        startBat.text = """@echo off
+REM AI Model Proxy Forward - Startup Script
+
+echo ========================================
+echo   AI Model Proxy Forward
+echo ========================================
+echo.
+
+REM 检查 Java
+java -version >nul 2>&1
+if errorlevel 1 (
+    echo Error: Java not found. Please install JDK 17+
+    pause
+    exit /b 1
+)
+
+if "%1"=="" (
+    echo Usage:
+    echo   start.bat server [config]  - Start forward server
+    echo   start.bat agent  [config]  - Start agent
+    echo.
+    echo Example:
+    echo   start.bat server config\\server.yaml
+    echo   start.bat agent  config\\agent.yaml
+    pause
+    exit /b 1
+)
+
+if "%1"=="server" (
+    echo Starting server...
+    if "%2"=="" (
+        java -jar libs\\forward-server-${version}.jar --config config\\server.yaml
+    ) else (
+        java -jar libs\\forward-server-${version}.jar --config %2
+    )
+) else if "%1"=="agent" (
+    echo Starting agent...
+    if "%2"=="" (
+        java -jar libs\\forward-agent-${version}.jar --config config\\agent.yaml
+    ) else (
+        java -jar libs\\forward-agent-${version}.jar --config %2
+    )
+) else (
+    echo Unknown command: %1
+    echo Usage: start.bat server^|agent [config-file]
+)
+
+pause
+"""
+
+        // 创建 README
+        def readme = file("dist/README.txt")
+        readme.text = """# AI Model Proxy Forward - Distribution Package
+
+## Quick Start
+
+### Directory Structure
+
+```
+dist/
+├── bin/
+│   └── start.bat           # Startup script (Windows)
+├── config/
+│   ├── server.yaml         # Server config template
+│   └── agent.yaml         # Agent config template
+├── libs/
+│   ├── forward-server-${version}.jar
+│   └── forward-agent-${version}.jar
+└── README.txt
+```
+
+### Deployment Steps
+
+1. Configure Server
+   Copy config\\server.yaml to config\\my-server.yaml and edit it
+
+2. Configure Agent
+   Copy config\\agent.yaml to config\\my-agent.yaml and edit it
+
+3. Start Server
+   start.bat server config\\my-server.yaml
+
+4. Start Agent (on internal network machine)
+   start.bat agent config\\my-agent.yaml
+
+### Test
+
+curl -X POST http://localhost:8080/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -H "X-Auth-Token: your-token" \\
+  -d "{\\"model\\": \\"gpt-4\\", \\"messages\\": [{\\"role\\": \\"user\\", \\"content\\": \\"Hello!\\"}]}"
+
+## Security Warning
+
+> ⚠️ **Production environment must use HTTPS**
+>
+> Do not use HTTP in production, otherwise tokens will be intercepted!
+
+## License
+
+MIT License
+"""
+
+        // 创建 tar.gz
+        ant.tar(destfile: "forward-dist-${version}.tar.gz", compression: 'gzip') {
+            fileset(dir: 'dist') {
+                exclude name: 'README.txt'
+            }
+            fileset(file: 'dist/README.txt')
+        }
+
+        println "Distribution created: forward-dist-${version}.tar.gz"
+    }
+}
+
+// 默认任务
+defaultTasks 'dist'
