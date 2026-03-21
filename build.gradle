@@ -1,0 +1,42 @@
+// 根项目配置
+plugins {
+    id 'java'
+}
+
+allprojects {
+    group = 'org.ljc'
+    version = '1.0-SNAPSHOT'
+
+    repositories {
+        mavenCentral()
+    }
+}
+
+subprojects {
+    apply plugin: 'java'
+
+    java {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    dependencies {
+        // JSON 处理
+        implementation 'com.fasterxml.jackson.core:jackson-databind:2.16.0'
+        implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.16.0'
+
+        // HTTP 客户端
+        implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+        // 日志
+        implementation 'org.slf4j:slf4j-api:2.0.9'
+        implementation 'ch.qos.logback:logback-classic:1.4.14'
+    }
+}
+
+// 创建可执行 JAR
+tasks.register('buildAll') {
+    group = 'build'
+    description = 'Build all modules'
+    dependsOn subprojects*.build
+}

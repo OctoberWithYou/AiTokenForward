@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew build:*)",
+      "Bash(\"D:\\\\user\\\\application\\\\gradle9\\\\gradle-9.0.0\\\\bin\\\\gradle\" build:*)",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Program Files \\(x86\\)/**)",
+      "Read(//c/Users/**)",
+      "Bash(JAVA_HOME=\"/c/Users/44380/.jdks/openjdk-18\" \"D:\\\\user\\\\application\\\\gradle9\\\\gradle-9.0.0\\\\bin\\\\gradle\" build)",
+      "Bash(rm -rf .gradle)",
+      "Bash(JAVA_HOME=\"/c/Users/44380/.jdks/openjdk-18\" \"D:\\\\user\\\\application\\\\gradle9\\\\gradle-9.0.0\\\\bin\\\\gradle\" --stop)",
+      "Bash(JAVA_HOME=\"/c/Users/44380/.jdks/openjdk-18\" \"D:\\\\user\\\\application\\\\gradle9\\\\gradle-9.0.0\\\\bin\\\\gradle\" build --no-daemon)",
+      "Bash(gradle build:*)",
+      "Bash(where gradle:*)",
+      "Bash(echo $PATH)"
+    ]
+  }
+}

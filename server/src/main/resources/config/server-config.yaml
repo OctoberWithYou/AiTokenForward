@@ -1,0 +1,26 @@
+# 服务器配置示例
+server:
+  host: "0.0.0.0"
+  port: 8080
+  ssl:
+    enabled: false
+    keyStore: "server.jks"
+    keyStorePassword: "changeit"
+
+# 外部客户端认证配置
+externalClient:
+  # 存储外部客户端 token 的文件路径
+  tokenFile: "config/external-token.txt"
+  # 客户端传递 token 的 HTTP header 名称
+  headerName: "X-Auth-Token"
+
+# 内部 Agent 认证配置
+auth:
+  apiKeys:
+    - "sk-forward-key-001"
+
+agent:
+  connection:
+    # Agent 连接时使用的认证 token
+    token: "agent-secret-token-12345"
+    maxAgents: 10

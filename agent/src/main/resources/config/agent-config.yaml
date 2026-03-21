@@ -1,0 +1,38 @@
+# Agent 配置示例
+server:
+  url: "wss://your-server.com/agent"
+  token: "agent-secret-token-12345"
+
+# 模型配置 - 支持多个模型
+models:
+  # OpenAI 模型
+  - id: "gpt-4"
+    provider: "openai"
+    endpoint: "https://api.openai.com/v1"
+    apiKey: "sk-your-openai-key"
+
+  - id: "gpt-3.5-turbo"
+    provider: "openai"
+    endpoint: "https://api.openai.com/v1"
+    apiKey: "sk-your-openai-key"
+
+  # Anthropic Claude 模型
+  - id: "claude-3-opus"
+    provider: "anthropic"
+    endpoint: "https://api.anthropic.com"
+    apiKey: "sk-ant-your-key"
+    apiVersion: "2023-06-01"
+
+  # Azure OpenAI 模型
+  - id: "azure-gpt-4"
+    provider: "azure"
+    endpoint: "https://your-resource.openai.azure.com"
+    apiKey: "your-azure-key"
+    apiVersion: "2024-02-01"
+
+# 重连配置
+reconnect:
+  enabled: true
+  maxAttempts: 10
+  initialDelayMs: 1000
+  maxDelayMs: 60000
