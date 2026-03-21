@@ -104,73 +104,18 @@ tasks.register('dist') {
         }
 
         copy {
-            from "dist/start.bat"
+            from "scripts/start.bat"
             into "dist/"
         }
         copy {
-            from "dist/start.sh"
+            from "scripts/start.sh"
             into "dist/"
         }
 
-        // 创建 README
-        file("dist/README.txt").text = """# AI Model Proxy Forward - Distribution Package
-
-## Version
-${version}
-
-## Quick Start
-
-### Directory Structure
-
-```
-dist/
-├── config/
-│   ├── server.yaml         # Server config template
-│   └── agent.yaml         # Agent config template
-├── libs/
-│   ├── forward-server-${version}.jar
-│   └── forward-agent-${version}.jar
-├── start.bat              # Windows startup script
-├── start.sh              # Linux startup script
-└── README.txt
-```
-
-### Deployment Steps
-
-1. Configure Server
-   Copy config/server.yaml to config/my-server.yaml and edit
-
-2. Configure Agent
-   Copy config/agent.yaml to config/my-agent.yaml and edit
-
-3. Start Server
-   # Windows
-   start.bat server config\\\\my-server.yaml
-   # Linux
-   ./start.sh server config/my-server.yaml
-
-4. Start Agent
-   # Windows
-   start.bat agent config\\\\my-agent.yaml
-   # Linux
-   ./start.sh agent config/my-agent.yaml
-
-### Test
-
-curl -X POST http://localhost:8080/v1/chat/completions \\
-  -H "Content-Type: application/json" \\
-  -H "X-Auth-Token: your-token" \\
-  -d "{\\"model\\": \\"gpt-4\\", \\"messages\\": [{\\"role\\": \\"user\\", \\"content\\": \\"Hello!\\"}]}"
-
-## Security Warning
-
-> Production environment must use HTTPS!
-> Do not use HTTP in production, otherwise tokens will be intercepted!
-
-## License
-
-MIT License
-"""
+        // 从模板创建中文 README
+        def readmeContent = file("dist-readme/README.template").text
+        readmeContent = readmeContent.replace('${version}', version)
+        file("dist/README.txt").text = readmeContent
 
         // 创建 tar.gz
         def distFileName = "forward-dist-${version}.tar.gz"

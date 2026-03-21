@@ -1,0 +1,229 @@
+# AI 模型代理转发系统 - 部署包
+
+## 版本
+${version}
+
+## 简介
+
+本系统实现 AI 模型 API 代理转发功能,允许外部客户端通过本系统访问内部网络的 AI 模型服务。
+
+### 适用场景
+
+- 内部网络有 AI 模型 API Key,但无法直接访问外部网络
+- 内部 Windows 机器可以访问外部网络
+- 需要通过服务器作为代理,让外部客户端访问内部 AI 模型
+
+### 系统架构
+
+```
+[外部客户端] --HTTP--> [Server] --WebSocket--> [Agent] --HTTP--> [AI Provider]
+```
+
+- **Server**: 接收外部客户端请求,通过 WebSocket 转发给 Agent
+- **Agent**: 部署在能访问 AI 服务的机器上,通过 WebSocket 与 Server 通信,调用实际的 AI 模型
+
+## 快速开始
+
+### 目录结构
+
+```
+dist/
+├── config/
+│   ├── server.yaml         # 服务器配置模板
+│   └── agent.yaml          # 代理配置模板
+├── libs/
+│   ├── forward-server-${version}.jar
+│   └── forward-agent-${version}.jar
+├── start.bat               # Windows 启动脚本
+├── start.sh                # Linux 启动脚本
+└── README.txt
+```
+
+### 部署步骤
+
+#### 1. 配置文件
+
+**服务器配置 (config/server.yaml)**:
+
+```yaml
+server:
+  host: "0.0.0.0"
+  port: 8080
+
+# 认证配置
+auth:
+  tokens:
+    - "your-secret-token"  # 客户端认证 Token
+
+# 代理配置
+agent:
+  url: "ws://localhost:8081/agent"
+```
+
+**代理配置 (config/agent.yaml)**:
+
+```yaml
+server:
+  url: "ws://your-server.com/agent"
+  token: "agent-secret-token-12345"
+
+# 模型配置 - 支持多个模型
+models:
+  - id: "gpt-4"
+    provider: "openai"
+    endpoint: "https://api.openai.com/v1"
+    apiKey: "sk-your-openai-key"
+
+  - id: "claude-3-opus"
+    provider: "anthropic"
+    endpoint: "https://api.anthropic.com"
+    apiKey: "sk-ant-your-key"
+    apiVersion: "2023-06-01"
+
+  - id: "azure-gpt-4"
+    provider: "azure"
+    endpoint: "https://your-resource.openai.azure.com"
+    apiKey: "your-azure-key"
+    apiVersion: "2024-02-01"
+
+# 重连配置
+reconnect:
+  enabled: true
+  maxAttempts: 10
+  initialDelayMs: 1000
+  maxDelayMs: 60000
+```
+
+#### 2. 启动服务
+
+**Windows**:
+
+```cmd
+# 启动服务器
+start.bat server config\server.yaml
+
+# 启动代理
+start.bat agent config\agent.yaml
+```
+
+**Linux**:
+
+```bash
+# 启动服务器
+./start.sh server config/server.yaml
+
+# 启动代理
+./start.sh agent config/agent.yaml
+```
+
+#### 3. 测试使用
+
+**Chat Completions API**:
+
+```bash
+curl -X POST http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "X-Auth-Token: your-secret-token" \
+  -d "{\"model\": \"gpt-4\", \"messages\": [{\"role\": \"user\", \"content\": \"你好！\"}]}"
+```
+
+**Embeddings API**:
+
+```bash
+curl -X POST http://localhost:8080/v1/embeddings \
+  -H "Content-Type: application/json" \
+  -H "X-Auth-Token: your-secret-token" \
+  -d "{\"model\": \"text-embedding-ada-002\", \"input\": \"Hello world\"}"
+```
+
+## API 参考
+
+### 支持的端点
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| /v1/chat/completions | POST | Chat Completion |
+| /v1/completions | POST | Text Completion |
+| /v1/embeddings | POST | Embeddings |
+| /v1/models | GET | 列出可用模型 |
+
+### 请求头
+
+| 头名称 | 必填 | 说明 |
+|--------|------|------|
+| X-Auth-Token | 是 | 认证 Token |
+| Content-Type | 是 | application/json |
+
+### 请求体格式
+
+与 OpenAI API 格式完全兼容。
+
+## 支持的模型提供商
+
+### OpenAI
+
+```yaml
+- id: "gpt-4"
+  provider: "openai"
+  endpoint: "https://api.openai.com/v1"
+  apiKey: "sk-xxx"
+```
+
+### Anthropic Claude
+
+```yaml
+- id: "claude-3-opus"
+  provider: "anthropic"
+  endpoint: "https://api.anthropic.com"
+  apiKey: "sk-ant-xxx"
+  apiVersion: "2023-06-01"
+```
+
+### Azure OpenAI
+
+```yaml
+- id: "azure-gpt-4"
+  provider: "azure"
+  endpoint: "https://your-resource.openai.azure.com"
+  apiKey: "your-key"
+  apiVersion: "2024-02-01"
+  deploymentName: "gpt-4"  # Azure 部署名称
+```
+
+## 安全警告
+
+> 生产环境必须使用 HTTPS!
+> 请勿在生产环境使用 HTTP,否则 Token 可能会被拦截!
+
+## 故障排除
+
+### 服务器无法启动
+
+1. 检查端口是否被占用: `netstat -ano | findstr 8080`
+2. 检查配置文件格式是否正确
+3. 检查 Java 版本 (需要 JDK 17+)
+
+### 代理无法连接服务器
+
+1. 检查服务器地址是否正确
+2. 检查 Token 是否匹配
+3. 检查网络连通性
+4. 查看日志获取详细错误信息
+
+### API 调用失败
+
+1. 检查模型配置是否正确
+2. 检查 API Key 是否有效
+3. 查看服务器和代理日志
+
+## 日志配置
+
+日志配置文件位于 JAR 包内,使用 Logback。
+
+默认日志级别: INFO
+
+如需自定义日志级别,可在外置配置目录创建 logback.xml。
+
+## 许可证
+
+MIT License
