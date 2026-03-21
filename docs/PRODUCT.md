@@ -124,7 +124,7 @@
 |------|------|------|
 | Chat Completions | 对话补全 API | ✅ |
 | Models List | 模型列表查询 | ✅ |
-| Embeddings | 向量嵌入 API | ⏳ |
+| Embeddings | 向量嵌入 API | ✅ |
 | 流式响应 | Server-Sent Events | ⏳ |
 
 ### 3.2 支持的模型提供商
@@ -316,6 +316,19 @@ curl http://localhost:8080/health
 ### Q3: 如何添加新的模型？
 - 在 Agent 配置中添加模型配置即可
 
-## 10. 联系方式
+## 10. 更新日志
+
+### v1.0.0 (2025-03-22)
+- ✅ 初始版本发布
+- ✅ 支持 Chat Completions API
+- ✅ 支持 Embeddings API
+- ✅ 支持 Models List 查询
+- ✅ 支持多模型提供商 (OpenAI, Anthropic, Azure)
+- ✅ WebSocket 长连接
+- ✅ Token 认证机制
+- ✅ 自动重连
+- ⏳ 流式响应支持 (计划中)
+
+## 11. 联系方式
 
 - 问题反馈: [GitHub Issues](https://github.com/your-repo/issues)
