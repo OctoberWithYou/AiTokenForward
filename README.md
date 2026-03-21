@@ -2,6 +2,14 @@
 
 一个用于转发 AI 模型 API 调用的代理系统，解决内网模型 key 无法被外网访问的问题。
 
+## 安全警告
+
+> **⚠️ 重要：生产环境必须使用 HTTPS**
+>
+> - Token 认证信息通过 HTTP Header 传递，**必须使用 HTTPS 加密传输**
+> - 禁止在生产环境使用 HTTP，否则 Token 会被明文截获
+> - 请参考「安全部署」章节配置 SSL/TLS
+
 ## 功能特性
 
 - **多模型支持**：支持 OpenAI、Anthropic Claude、Azure OpenAI 等多种模型
@@ -135,6 +143,28 @@ java -jar agent/build/libs/forward-agent-1.0-SNAPSHOT.jar \
 echo "your-client-secret-token" > config/external-token.txt
 ```
 
+#### 4. 安全部署（必读）
+
+**生产环境必须启用 HTTPS！**
+
+```yaml
+# server-config.yaml
+server:
+  host: "0.0.0.0"
+  port: 443
+  ssl:
+    enabled: true
+    keyStore: "server.jks"       # Java Keystore 文件
+    keyStorePassword: "changeit" # 密钥库密码
+```
+
+生成自签名证书（测试用）或使用 Let's Encrypt 获取正式证书：
+
+```bash
+# 生成自签名证书（仅用于测试）
+keytool -genkey -alias server -keyalg RSA -keystore server.jks -keysize 2048 -validity 3650
+```
+
 ### 使用示例
 
 ```bash
@@ -189,10 +219,15 @@ gradle :agent:test
 
 ## 安全注意事项
 
-1. **API Key 保护**：Agent 配置文件中的 API Key 需要妥善保管
+> **⚠️ 警告：生产环境必须使用 HTTPS**
+>
+> Token 通过 HTTP Header 传递，明文 HTTP 会导致 Token 被截获！
+
+1. **API Key 保护**：Agent 配置文件中的 API Key 需要妥善保管，建议使用环境变量
 2. **Token 安全**：外部客户端 token 和 Agent token 应使用强随机字符串
-3. **SSL/TLS**：生产环境建议启用 HTTPS
+3. **SSL/TLS**：**生产环境必须启用 HTTPS**（见上文「安全部署」章节）
 4. **网络隔离**：确保内网 Agent 的安全
+5. **Token 文件权限**：确保 token 文件权限设置为仅服务用户可读
 
 ## 许可证
 
