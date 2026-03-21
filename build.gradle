@@ -45,8 +45,9 @@ subprojects {
 
 tasks.register('buildAll') {
     group = 'build'
-    description = 'Build all modules'
+    description = 'Build all modules and create distribution package'
     dependsOn subprojects*.build
+    dependsOn 'dist'
 }
 
 // 清理任务 - 清理所有构建产物包括部署包
