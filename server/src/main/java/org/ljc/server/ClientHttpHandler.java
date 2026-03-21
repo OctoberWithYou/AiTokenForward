@@ -141,8 +141,53 @@ public class ClientHttpHandler implements HttpHandler {
     }
 
     private void handleEmbeddings(HttpExchange exchange) throws IOException {
-        // 类似 Chat Completions 的处理逻辑
-        sendError(exchange, 501, "Not implemented");
+        if (!agentManager.hasAvailableAgent()) {
+            sendError(exchange, 503, "No available agents");
+            return;
+        }
+
+        // 读取请求体
+        String requestBody = new String(exchange.getRequestBody().readAllBytes());
+        JsonNode requestJson = jsonMapper.readTree(requestBody);
+
+        // 提取 model
+        String model = requestJson.has("model") ? requestJson.get("model").asText() : "text-embedding-ada-002";
+
+        // 获取 Agent
+        AgentManager.AgentSession agent = agentManager.getAgentForModel(model);
+        if (agent == null) {
+            // 尝试使用默认模型
+            agent = agentManager.getAgentForModel(null);
+        }
+
+        if (agent == null) {
+            sendError(exchange, 503, "No available agent");
+            return;
+        }
+
+        // 创建请求 ID 并等待响应
+        String requestId = java.util.UUID.randomUUID().toString();
+        CompletableFuture<Message> responseFuture = new CompletableFuture<>();
+        pendingRequests.put(requestId, responseFuture);
+
+        try {
+            // 发送请求给 Agent
+            agent.sendRequest(requestId, "/v1/embeddings", jsonMapper.readValue(requestBody, Object.class));
+
+            // 等待响应（超时 60 秒）
+            Message response = responseFuture.get(60, TimeUnit.SECONDS);
+
+            if (response != null && response.getBody() != null) {
+                sendJson(exchange, 200, response.getBody());
+            } else {
+                sendError(exchange, 500, "No response from agent");
+            }
+        } catch (Exception e) {
+            logger.error("Error waiting for embeddings response: {}", e.getMessage());
+            sendError(exchange, 504, "Gateway Timeout: " + e.getMessage());
+        } finally {
+            pendingRequests.remove(requestId);
+        }
     }
 
     private void handleHealth(HttpExchange exchange) throws IOException {

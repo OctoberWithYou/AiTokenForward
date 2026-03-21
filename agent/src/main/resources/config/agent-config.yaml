@@ -30,6 +30,12 @@ models:
     apiKey: "your-azure-key"
     apiVersion: "2024-02-01"
 
+  # Embeddings 模型
+  - id: "text-embedding-ada-002"
+    provider: "openai"
+    endpoint: "https://api.openai.com/v1"
+    apiKey: "sk-your-openai-key"
+
 # 重连配置
 reconnect:
   enabled: true
