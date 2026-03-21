@@ -6,7 +6,20 @@ plugins {
 
 allprojects {
     group = 'org.ljc'
-    version = '1.0-SNAPSHOT'
+
+    // 使用 git tag 获取版本号
+    def gitDescribe = {
+        try {
+            def proc = 'git describe --tags --always --dirty'.execute()
+            proc.waitFor()
+            def result = proc.text.trim()
+            return result ? result : '1.0.0'
+        } catch (Exception e) {
+            return '1.0.0'
+        }
+    }
+
+    version = gitDescribe()
 
     repositories {
         mavenCentral()
@@ -36,6 +49,22 @@ tasks.register('buildAll') {
     dependsOn subprojects*.build
 }
 
+// 清理任务 - 清理所有构建产物包括部署包
+tasks.register('cleanAll', Delete) {
+    group = 'build'
+    description = 'Clean all build outputs including distribution'
+
+    delete fileTree('dist')
+    fileTree('.').matching {
+        include 'forward-dist-*.tar.gz'
+    }
+}
+
+// 确保默认的 clean 任务也清理部署包
+tasks.named('clean') {
+    dependsOn 'cleanAll'
+}
+
 tasks.register('dist') {
     group = 'distribution'
     description = 'Create distribution package'
@@ -44,7 +73,14 @@ tasks.register('dist') {
 
     doLast {
         def distDir = file("dist")
+        distDir.deleteDir()
         distDir.mkdirs()
+
+        def libsDir = file("dist/libs")
+        libsDir.mkdirs()
+
+        def configDir = file("dist/config")
+        configDir.mkdirs()
 
         copy {
             from "server/build/libs/forward-server-${version}.jar"
@@ -77,6 +113,9 @@ tasks.register('dist') {
 
         // 创建 README
         file("dist/README.txt").text = """# AI Model Proxy Forward - Distribution Package
+
+## Version
+${version}
 
 ## Quick Start
 
@@ -133,11 +172,12 @@ MIT License
 """
 
         // 创建 tar.gz
-        ant.tar(destfile: "forward-dist-${version}.tar.gz", compression: 'gzip') {
+        def distFileName = "forward-dist-${version}.tar.gz"
+        ant.tar(destfile: distFileName, compression: 'gzip') {
             fileset(dir: 'dist')
         }
 
-        println "Distribution created: forward-dist-${version}.tar.gz"
+        println "Distribution created: ${distFileName}"
     }
 }
 
