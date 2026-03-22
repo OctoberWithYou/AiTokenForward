@@ -50,13 +50,18 @@ tasks.register('buildAll') {
     dependsOn 'dist'
 }
 
+// 将打包集成到默认 build 任务
+tasks.named('build') {
+    dependsOn subprojects*.build
+    dependsOn 'dist'
+}
+
 // 清理任务 - 清理所有构建产物包括部署包
 tasks.register('cleanAll', Delete) {
     group = 'build'
     description = 'Clean all build outputs including distribution'
 
-    delete fileTree('dist')
-    fileTree('.').matching {
+    delete 'dist', fileTree('.').matching {
         include 'forward-dist-*.tar.gz'
     }
 }
@@ -70,7 +75,7 @@ tasks.register('dist') {
     group = 'distribution'
     description = 'Create distribution package'
 
-    dependsOn build
+    dependsOn subprojects*.build
 
     doLast {
         def distDir = file("dist")
@@ -126,5 +131,3 @@ tasks.register('dist') {
         println "Distribution created: ${distFileName}"
     }
 }
-
-defaultTasks 'dist'
