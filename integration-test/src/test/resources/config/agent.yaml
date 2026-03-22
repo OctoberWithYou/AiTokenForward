@@ -1,6 +1,6 @@
 # Integration Test Agent Config
 server:
-  url: "ws://127.0.0.1:18080/agent"
+  url: "ws://127.0.0.1:18081/agent"
   token: "test-agent-token"
 
 # Register models that the tests expect
