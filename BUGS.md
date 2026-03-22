@@ -10,12 +10,13 @@
 
 ### 根本原因
 Server.java 中 `AgentWebSocketHttpHandler` 只处理了 WebSocket 握手(升级协议)，在发送 101 响应后没有：
-1. 获取底层 socket 连接
+1. 获取底层 socket 连接 (Java 21 限制)
 2. 启动线程读取 WebSocket 帧数据
 3. 调用 `agentHandler.handleMessage()` 处理接收到的消息
 
-### 修复方案
-在 WebSocket 握手后启动一个线程来读取 WebSocket 帧数据。需要解决 Java 21 中无法直接获取底层 socket 的问题。
+### 尝试的修复方案
+1. 使用反射获取 HttpExchange 底层 socket - 失败 (Java 21 限制)
+2. 使用 Java-WebSocket 库 - 编译失败 (jar 打包方式问题)
 
 ### 状态: 待修复
 
@@ -34,19 +35,3 @@ Server.java 中 `AgentWebSocketHttpHandler` 只处理了 WebSocket 握手(升级
 修复 Bug #1 后自动解决
 
 ### 状态: 待修复 (依赖 Bug #1)
-
----
-
-## Bug #3: Java 21 反射限制
-
-### 问题描述
-- Java 21 中 `com.sun.net.httpserver` 内部 API 访问受限
-- 无法通过反射获取 `HttpConnection` 或底层 `Socket`
-
-### 状态: 待修复 (作为 Bug #1 的一部分)
-
----
-
-## 已完成的修复
-
-(暂无)

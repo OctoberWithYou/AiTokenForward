@@ -1,4 +1,5 @@
 # Integration Test Agent Config
+# WebSocket 端口 = HTTP 端口 + 1
 server:
   url: "ws://127.0.0.1:18081/agent"
   token: "test-agent-token"
