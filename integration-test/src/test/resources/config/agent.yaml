@@ -1,0 +1,16 @@
+# Integration Test Agent Config
+server:
+  url: "ws://127.0.0.1:18080/agent"
+  token: "test-agent-token"
+
+models:
+  - id: "test-model"
+    provider: "mock"
+    endpoint: "http://localhost:9999"
+    apiKey: "test-key"
+
+reconnect:
+  enabled: true
+  maxAttempts: 3
+  initialDelayMs: 500
+  maxDelayMs: 5000

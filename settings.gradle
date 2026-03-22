@@ -2,3 +2,4 @@ rootProject.name = 'Forward'
 
 include 'server'
 include 'agent'
+include 'integration-test'

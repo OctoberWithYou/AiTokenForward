@@ -1,0 +1,19 @@
+# Integration Test Server Config
+server:
+  host: "127.0.0.1"
+  port: 18080
+  ssl:
+    enabled: false
+
+externalClient:
+  tokenFile: "integration-test/src/test/resources/config/external-token.txt"
+  headerName: "X-Auth-Token"
+
+auth:
+  apiKeys:
+    - "test-agent-key"
+
+agent:
+  connection:
+    token: "test-agent-token"
+    maxAgents: 5

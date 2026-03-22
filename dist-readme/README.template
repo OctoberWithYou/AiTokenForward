@@ -22,9 +22,7 @@ ${version}
 - **Server**: 接收外部客户端请求,通过 WebSocket 转发给 Agent
 - **Agent**: 部署在能访问 AI 服务的机器上,通过 WebSocket 与 Server 通信,调用实际的 AI 模型
 
-## 快速开始
-
-### 目录结构
+## 目录结构
 
 ```
 dist/
@@ -39,47 +37,92 @@ dist/
 └── README.txt
 ```
 
-### 部署步骤
+## 配置说明
 
-#### 1. 配置文件
+### 1. 服务器配置 (server.yaml)
 
-**服务器配置 (config/server.yaml)**:
+服务器需要配置:
+- 服务器监听地址和端口
+- 外部客户端认证方式(通过 token 文件)
+- Agent 连接认证
+
+**配置示例**:
 
 ```yaml
+# 服务器基本配置
 server:
-  host: "0.0.0.0"
-  port: 8080
+  host: "0.0.0.0"    # 监听地址
+  port: 8080          # 监听端口
+  ssl:
+    enabled: false   # 是否启用 HTTPS
+    keyStore: "server.jks"
+    keyStorePassword: "changeit"
 
-# 认证配置
+# 外部客户端认证配置
+externalClient:
+  tokenFile: "config/external-token.txt"  # 存储客户端 token 的文件
+  headerName: "X-Auth-Token"               # 客户端传递 token 的 HTTP header
+
+# Agent 认证配置
 auth:
-  tokens:
-    - "your-secret-token"  # 客户端认证 Token
+  apiKeys:
+    - "sk-forward-key-001"   # Agent 认证 API Key
 
-# 代理配置
+# Agent 连接配置
 agent:
-  url: "ws://localhost:8081/agent"
+  connection:
+    token: "agent-secret-token-12345"   # Agent 连接时使用的 token
+    maxAgents: 10                         # 最大 Agent 连接数
 ```
 
-**代理配置 (config/agent.yaml)**:
+**external-token.txt 文件格式**:
+每行一个 token:
+```
+client-token-001
+client-token-002
+your-secret-token
+```
+
+### 2. 代理配置 (agent.yaml)
+
+代理需要配置:
+- Server 连接信息(WebSocket URL 和 token)
+- 支持的模型列表(每个模型需要配置 provider、endpoint、apiKey)
+
+**配置示例**:
 
 ```yaml
+# 连接到服务器的配置
 server:
-  url: "ws://your-server.com/agent"
-  token: "agent-secret-token-12345"
+  url: "ws://your-server.com/agent"    # 服务器 WebSocket 地址
+  token: "agent-secret-token-12345"    # 与服务器 agent.connection.token 匹配
 
-# 模型配置 - 支持多个模型
+# 支持的模型列表
 models:
+  # OpenAI 模型
   - id: "gpt-4"
     provider: "openai"
     endpoint: "https://api.openai.com/v1"
     apiKey: "sk-your-openai-key"
 
-  - id: "claude-3-opus"
+  - id: "gpt-3.5-turbo"
+    provider: "openai"
+    endpoint: "https://api.openai.com/v1"
+    apiKey: "sk-your-openai-key"
+
+  - id: "text-embedding-ada-002"
+    provider: "openai"
+    endpoint: "https://api.openai.com/v1"
+    apiKey: "sk-your-openai-key"
+
+  # Anthropic Claude 模型
+  - id: "claude-3-opus-20240229"
     provider: "anthropic"
     endpoint: "https://api.anthropic.com"
     apiKey: "sk-ant-your-key"
     apiVersion: "2023-06-01"
 
+  # Azure OpenAI 模型
   - id: "azure-gpt-4"
     provider: "azure"
     endpoint: "https://your-resource.openai.azure.com"
@@ -94,73 +137,9 @@ reconnect:
   maxDelayMs: 60000
 ```
 
-#### 2. 启动服务
+### 3. 模型提供商配置
 
-**Windows**:
-
-```cmd
-# 启动服务器
-start.bat server config\server.yaml
-
-# 启动代理
-start.bat agent config\agent.yaml
-```
-
-**Linux**:
-
-```bash
-# 启动服务器
-./start.sh server config/server.yaml
-
-# 启动代理
-./start.sh agent config/agent.yaml
-```
-
-#### 3. 测试使用
-
-**Chat Completions API**:
-
-```bash
-curl -X POST http://localhost:8080/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "X-Auth-Token: your-secret-token" \
-  -d "{\"model\": \"gpt-4\", \"messages\": [{\"role\": \"user\", \"content\": \"你好！\"}]}"
-```
-
-**Embeddings API**:
-
-```bash
-curl -X POST http://localhost:8080/v1/embeddings \
-  -H "Content-Type: application/json" \
-  -H "X-Auth-Token: your-secret-token" \
-  -d "{\"model\": \"text-embedding-ada-002\", \"input\": \"Hello world\"}"
-```
-
-## API 参考
-
-### 支持的端点
-
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| /v1/chat/completions | POST | Chat Completion |
-| /v1/completions | POST | Text Completion |
-| /v1/embeddings | POST | Embeddings |
-| /v1/models | GET | 列出可用模型 |
-
-### 请求头
-
-| 头名称 | 必填 | 说明 |
-|--------|------|------|
-| X-Auth-Token | 是 | 认证 Token |
-| Content-Type | 是 | application/json |
-
-### 请求体格式
-
-与 OpenAI API 格式完全兼容。
-
-## 支持的模型提供商
-
-### OpenAI
+#### OpenAI
 
 ```yaml
 - id: "gpt-4"
@@ -169,17 +148,17 @@ curl -X POST http://localhost:8080/v1/embeddings \
   apiKey: "sk-xxx"
 ```
 
-### Anthropic Claude
+#### Anthropic Claude
 
 ```yaml
-- id: "claude-3-opus"
+- id: "claude-3-opus-20240229"
   provider: "anthropic"
   endpoint: "https://api.anthropic.com"
   apiKey: "sk-ant-xxx"
   apiVersion: "2023-06-01"
 ```
 
-### Azure OpenAI
+#### Azure OpenAI
 
 ```yaml
 - id: "azure-gpt-4"
@@ -190,39 +169,151 @@ curl -X POST http://localhost:8080/v1/embeddings \
   deploymentName: "gpt-4"  # Azure 部署名称
 ```
 
-## 安全警告
+## 启动步骤
 
-> 生产环境必须使用 HTTPS!
-> 请勿在生产环境使用 HTTP,否则 Token 可能会被拦截!
+### 1. 准备配置文件
+
+在 dist 目录下创建实际使用的配置文件:
+
+**创建 external-token.txt**:
+```bash
+echo "your-secret-token" > config/external-token.txt
+```
+
+**复制并修改 server.yaml**:
+```bash
+cp config/server.yaml config/my-server.yaml
+# 编辑 my-server.yaml 修改 token 等配置
+```
+
+**复制并修改 agent.yaml**:
+```bash
+cp config/agent.yaml config/my-agent.yaml
+# 编辑 my-agent.yaml 添加实际的 API Key 等
+```
+
+### 2. 启动服务
+
+**Windows**:
+
+```cmd
+REM 启动服务器
+start.bat server config\my-server.yaml
+
+REM 新开命令行窗口启动代理
+start.bat agent config\my-agent.yaml
+```
+
+**Linux**:
+
+```bash
+# 启动服务器
+./start.sh server config/my-server.yaml
+
+# 启动代理 (新终端)
+./start.sh agent config/my-agent.yaml
+```
+
+## API 使用
+
+### 认证
+
+客户端需要在请求头中传递 token:
+- Header 名称: `X-Auth-Token` (可在 server.yaml 中配置)
+- Token 值: 必须在 external-token.txt 文件中存在
+
+### API 端点
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| /v1/chat/completions | POST | Chat Completion |
+| /v1/completions | POST | Text Completion |
+| /v1/embeddings | POST | Embeddings |
+| /v1/models | GET | 列出可用模型 |
+
+### 请求示例
+
+**Chat Completions**:
+
+```bash
+curl -X POST http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "X-Auth-Token: your-secret-token" \
+  -d '{
+    "model": "gpt-4",
+    "messages": [
+      {"role": "user", "content": "你好!"}
+    ]
+  }'
+```
+
+**Embeddings**:
+
+```bash
+curl -X POST http://localhost:8080/v1/embeddings \
+  -H "Content-Type: application/json" \
+  -H "X-Auth-Token: your-secret-token" \
+  -d '{
+    "model": "text-embedding-ada-002",
+    "input": "Hello world"
+  }'
+```
+
+**列出模型**:
+
+```bash
+curl -X GET http://localhost:8080/v1/models \
+  -H "X-Auth-Token: your-secret-token"
+```
 
 ## 故障排除
 
 ### 服务器无法启动
 
-1. 检查端口是否被占用: `netstat -ano | findstr 8080`
-2. 检查配置文件格式是否正确
-3. 检查 Java 版本 (需要 JDK 17+)
+1. 检查端口是否被占用:
+   - Windows: `netstat -ano | findstr 8080`
+   - Linux: `netstat -tlnp | grep 8080`
+2. 检查配置文件格式是否正确 (YAML 语法)
+3. 检查 Java 版本 (需要 JDK 17+): `java -version`
+4. 检查 external-token.txt 文件是否存在
 
-### 代理无法连接服务器
+### Agent 无法连接服务器
 
 1. 检查服务器地址是否正确
-2. 检查 Token 是否匹配
-3. 检查网络连通性
+2. 检查 token 是否匹配 (agent.yaml 中的 token 与 server.yaml 中的 agent.connection.token)
+3. 检查网络连通性: `telnet your-server.com 8080`
 4. 查看日志获取详细错误信息
 
-### API 调用失败
+### API 调用返回错误
 
-1. 检查模型配置是否正确
-2. 检查 API Key 是否有效
-3. 查看服务器和代理日志
+1. 检查请求头是否包含正确的 X-Auth-Token
+2. 检查模型配置是否正确 (id、provider、endpoint、apiKey)
+3. 检查 Agent 是否已成功连接 (查看 Agent 日志)
+4. 查看服务器和 Agent 日志
 
-## 日志配置
+## 日志
 
-日志配置文件位于 JAR 包内,使用 Logback。
+日志使用 Logback,默认日志级别 INFO。
 
-默认日志级别: INFO
+如需自定义日志级别,可在外置配置目录创建 logback.xml:
 
-如需自定义日志级别,可在外置配置目录创建 logback.xml。
+```xml
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    <root level="DEBUG">
+        <appender-ref ref="STDOUT" />
+    </root>
+</configuration>
+```
+
+## 安全警告
+
+> 生产环境必须使用 HTTPS!
+> 请勿在生产环境使用 HTTP,否则 Token 可能会被拦截!
 
 ## 许可证
 

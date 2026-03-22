@@ -1,0 +1,61 @@
+plugins {
+    id 'java'
+}
+
+// Integration tests should run after server and agent are built
+evaluationDependsOn(':server')
+evaluationDependsOn(':agent')
+
+group = 'org.ljc'
+version = rootProject.version
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Test framework
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.1'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    // HTTP client
+    testImplementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    // JSON processing
+    testImplementation 'com.fasterxml.jackson.core:jackson-databind:2.16.0'
+
+    // Logging
+    testImplementation 'org.slf4j:slf4j-api:2.0.9'
+    testRuntimeOnly 'ch.qos.logback:logback-classic:1.4.14'
+}
+
+test {
+    useJUnitPlatform()
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat "full"
+    }
+
+    // Fail on no tests found - needed for normal test task
+    failOnNoDiscoveredTests = false
+
+    // Skip integration tests by default, run with: gradle integrationTest
+    exclude '**/*IntegrationTest*'
+}
+
+// Create integrationTest task that runs integration tests
+tasks.register('integrationTest', Test) {
+    group = 'integration'
+    description = 'Run integration tests against built JARs'
+    dependsOn ':server:build'
+    dependsOn ':agent:build'
+
+    useJUnitPlatform()
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat "full"
+    }
+
+    // Include integration tests only
+    include '**/*IntegrationTest*'
+}
