@@ -42,9 +42,8 @@ public class IntegrationTest {
         logger.info("Mock API server started on port 9999");
 
         // Get JAR paths from build output
-        String basePath = System.getProperty("user.dir");
-        String serverJar = findJar(basePath, "forward-server");
-        String agentJar = findJar(basePath, "forward-agent");
+        String serverJar = findJar("forward-server");
+        String agentJar = findJar("forward-agent");
 
         logger.info("Server JAR: {}", serverJar);
         logger.info("Agent JAR: {}", agentJar);
@@ -52,8 +51,14 @@ public class IntegrationTest {
         // Start processes
         pm = new ProcessManager();
 
-        // Use absolute paths for test config
-        String configDir = basePath + "/integration-test/src/test/resources/config";
+        // Use paths for test config
+        String configDir = System.getProperty("user.dir");
+        if (configDir.contains("integration-test")) {
+            configDir = configDir.substring(0, configDir.indexOf("integration-test")) + "integration-test/src/test/resources/config";
+        } else {
+            configDir = configDir + "/integration-test/src/test/resources/config";
+        }
+        configDir = configDir.replace("\\", "/");
         pm.startServer(serverJar, configDir + "/server.yaml");
         logger.info("Server started");
 
@@ -79,20 +84,35 @@ public class IntegrationTest {
         logger.info("Tear down complete");
     }
 
-    private static String findJar(String basePath, String prefix) throws IOException {
-        // First try build/libs
-        String[] possiblePaths = {
-            basePath + "/server/build/libs/" + prefix + "-*.jar",
-            basePath + "/agent/build/libs/" + prefix + "-*.jar",
-            basePath + "/dist/libs/" + prefix + "-*.jar"
+    private static String findJar(String prefix) throws IOException {
+        // Get project root from Gradle property or use a fixed approach
+        String rootPath = System.getProperty("project.root",
+            System.getProperty("user.dir").replace("\\", "/"));
+
+        // Ensure we have the root path
+        if (rootPath.contains("integration-test")) {
+            rootPath = rootPath.substring(0, rootPath.indexOf("integration-test"));
+        }
+        if (!rootPath.endsWith("/")) {
+            rootPath = rootPath + "/";
+        }
+
+        logger.info("Searching for JAR prefix: {} in root: {}", prefix, rootPath);
+
+        // Search in multiple locations
+        String[] dirs = {
+            rootPath + "server/build/libs/",
+            rootPath + "agent/build/libs/"
         };
 
-        for (String pattern : possiblePaths) {
-            java.io.File dir = new java.io.File(pattern.replace("/*", ""));
+        for (String dirPath : dirs) {
+            java.io.File dir = new java.io.File(dirPath);
+            logger.info("Checking: {} exists={}", dirPath, dir.exists());
             if (dir.exists() && dir.isDirectory()) {
-                java.io.File[] files = dir.listFiles((d, name) -> name.startsWith(prefix) && name.endsWith(".jar"));
+                java.io.File[] files = dir.listFiles((d, name) ->
+                    name.startsWith(prefix) && name.endsWith(".jar") && !name.contains("-sources"));
                 if (files != null && files.length > 0) {
-                    // Return the most recent one
+                    // Sort by last modified, get latest
                     java.io.File latest = files[0];
                     for (java.io.File f : files) {
                         if (f.lastModified() > latest.lastModified()) {
@@ -104,7 +124,7 @@ public class IntegrationTest {
                 }
             }
         }
-        throw new IOException("Could not find JAR for: " + prefix);
+        throw new IOException("Could not find JAR for: " + prefix + " in " + rootPath);
     }
 
     @Test

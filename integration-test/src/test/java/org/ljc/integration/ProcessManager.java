@@ -7,8 +7,6 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -29,6 +27,13 @@ public class ProcessManager {
     public void startServer(String serverJarPath, String configPath) throws IOException {
         logger.info("Starting server with config: {}", configPath);
 
+        // Get project root - go up from integration-test
+        String projectRoot = System.getProperty("user.dir");
+        if (projectRoot.contains("integration-test")) {
+            projectRoot = projectRoot.substring(0, projectRoot.indexOf("integration-test"));
+        }
+        projectRoot = projectRoot.replace("\\", "/");
+
         List<String> command = new ArrayList<>();
         command.add("java");
         command.add("-jar");
@@ -37,8 +42,11 @@ public class ProcessManager {
         command.add(configPath);
 
         ProcessBuilder pb = new ProcessBuilder(command);
-        pb.directory(new File(configPath).getParentFile().getParentFile().getParentFile());
+        pb.directory(new File(projectRoot));
         pb.redirectErrorStream(true);
+
+        // Add environment variables
+        pb.environment().put("JAVA_TOOL_OPTIONS", "-Duser.dir=" + projectRoot);
 
         serverProcess = pb.start();
         processes.add(serverProcess);
@@ -66,6 +74,13 @@ public class ProcessManager {
     public void startAgent(String agentJarPath, String configPath) throws IOException {
         logger.info("Starting agent with config: {}", configPath);
 
+        // Get project root
+        String projectRoot = System.getProperty("user.dir");
+        if (projectRoot.contains("integration-test")) {
+            projectRoot = projectRoot.substring(0, projectRoot.indexOf("integration-test"));
+        }
+        projectRoot = projectRoot.replace("\\", "/");
+
         List<String> command = new ArrayList<>();
         command.add("java");
         command.add("-jar");
@@ -74,8 +89,10 @@ public class ProcessManager {
         command.add(configPath);
 
         ProcessBuilder pb = new ProcessBuilder(command);
-        pb.directory(new File(configPath).getParentFile().getParentFile().getParentFile());
+        pb.directory(new File(projectRoot));
         pb.redirectErrorStream(true);
+
+        pb.environment().put("JAVA_TOOL_OPTIONS", "-Duser.dir=" + projectRoot);
 
         agentProcess = pb.start();
         processes.add(agentProcess);
@@ -94,7 +111,7 @@ public class ProcessManager {
 
         // Wait a bit for agent to connect
         try {
-            Thread.sleep(2000);
+            Thread.sleep(3000);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
