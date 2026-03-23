@@ -40,6 +40,23 @@ Server.java 中 `AgentWebSocketHttpHandler` 只处理了 WebSocket 握手(升级
 
 ---
 
+## Bug #3: 打包后 README 未更新界面化使用方式
+
+### 问题描述
+- 打包后的 `dist/README.txt` 缺少图形化配置工具的使用说明
+- 用户无法了解新增加的 Web 版配置工具
+
+### 根本原因
+- 添加 config-tool 模块后，未更新 dist/README.txt
+
+### 修复方案
+- 在 dist/README.txt 中添加"方式一：使用图形化配置工具"章节
+- 说明访问地址: http://localhost:8888
+
+### 状态: 已修复 ✓
+
+---
+
 ## 验证结果
 - 集成测试: 7/7 通过
 - testServerHealthCheck: PASSED

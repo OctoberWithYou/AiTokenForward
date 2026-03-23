@@ -3,12 +3,28 @@
 ## 开发规范
 
 ### 1. Bug 修复流程
-- 每次发现 Bug 必须记录到 BUGS.md
+- **每次发现 Bug 必须记录到 BUGS.md**
 - 记录内容: 问题描述、根本原因、修复方案、状态
+- **所有影响表现的问题都应当被计入 Bug**,包括:
+  - 功能缺陷
+  - 性能问题
+  - 配置错误
+  - 文档错误
+  - UI/界面问题
 - 修复后必须运行集成测试验证
 - 测试命令: `gradle integrationTest`
 
-### 2. 集成测试
+### 2. 文档同步规则
+- **每次代码修改后,必须检查并更新相关文档**
+- 文档包括:
+  - `README.md` - 项目主文档
+  - `dist/README.txt` - 打包后的部署说明
+  - `CLAUDE.md` - 项目规则
+  - `BUGS.md` - Bug 记录
+  - `config-tool/README.md` - 配置工具说明
+- **特别重要**: 运行 `gradle build` 打包后,必须检查 `dist/README.txt` 是否已更新
+
+### 3. 集成测试
 - 集成测试模块: `integration-test/`
 - 运行测试: `gradle integrationTest`
 - 测试报告位置:
@@ -17,12 +33,12 @@
 - 使用 JUnit 5 + OkHttp 进行黑盒测试
 - 测试包含: 认证测试(401)、API 测试(200, 404)
 
-### 3. 构建命令
+### 4. 构建命令
 - `gradle build` - 编译、测试、打包
 - `gradle clean` - 清理所有构建产物
 - `gradle integrationTest` - 运行集成测试
 
-### 4. Git 提交规范
+### 5. Git 提交规范
 - 每次功能/修复完成后提交
 - 提交信息包含: 改动内容、问题修复说明
 
@@ -34,6 +50,9 @@
 
 ### Bug #2: Agent 注册失败 ✓ 已修复
 - 添加 ResponseCallback 机制连接 Agent 响应到 HTTP 请求
+
+### Bug #3: 打包后 README 未更新界面化使用方式 ✓ 已修复
+- 添加了图形化配置工具使用说明到 dist/README.txt
 
 ## 技术栈
 - Java 17
