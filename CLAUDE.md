@@ -11,7 +11,9 @@
 ### 2. 集成测试
 - 集成测试模块: `integration-test/`
 - 运行测试: `gradle integrationTest`
-- 测试报告位置: `integration-test/build/reports/integration-tests/index.html`
+- 测试报告位置:
+  - HTML报告: `integration-test/build/reports/integration-tests/index.html`
+  - Allure报告: `integration-test/build/allure-report/index.html`
 - 使用 JUnit 5 + OkHttp 进行黑盒测试
 - 测试包含: 认证测试(401)、API 测试(200, 404)
 
@@ -24,19 +26,14 @@
 - 每次功能/修复完成后提交
 - 提交信息包含: 改动内容、问题修复说明
 
-## 已知 Bug
+## 已修复 Bug
 
-### Bug #1: 服务器 WebSocket 无法接收消息 (待修复)
-- **问题**: WebSocket 握手后没有读取帧的逻辑
-- **根本原因**: `AgentWebSocketHttpHandler.handle()` 只处理 101 响应，未启动读取线程
-- **修复方案**: 在握手后启动线程读取 WebSocket 帧
-- **状态**: 待修复
+### Bug #1: 服务器 WebSocket 无法接收消息 ✓ 已修复
+- 使用 Java NIO 实现完整的 WebSocket 服务器
+- 在 HTTP 端口 + 1 上启动独立的 WebSocket 服务
 
-### Bug #2: Agent 注册失败 (待修复)
-- **现象**: 返回 503 "No available agents"
-- **原因**: Agent 连接后注册消息未正确传递到 handleRegister
-- **依赖**: Bug #1
-- **状态**: 待修复
+### Bug #2: Agent 注册失败 ✓ 已修复
+- 添加 ResponseCallback 机制连接 Agent 响应到 HTTP 请求
 
 ## 技术栈
 - Java 17
@@ -45,3 +42,4 @@
 - Jackson (JSON/YAML)
 - SLF4J + Logback (日志)
 - JUnit 5 (测试)
+- Allure 2.24 (测试报告)
