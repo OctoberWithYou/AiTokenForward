@@ -18,6 +18,17 @@ public class AgentWebSocketHandler {
     private final String expectedToken;
     private final Set<PendingRequest> pendingRequests = ConcurrentHashMap.newKeySet();
 
+    // Callback for response handling
+    private ResponseCallback responseCallback;
+
+    public interface ResponseCallback {
+        void onResponse(String requestId, Message response);
+    }
+
+    public void setResponseCallback(ResponseCallback callback) {
+        this.responseCallback = callback;
+    }
+
     public AgentWebSocketHandler(AgentManager agentManager, String expectedToken) {
         this.agentManager = agentManager;
         this.expectedToken = expectedToken;
@@ -88,6 +99,11 @@ public class AgentWebSocketHandler {
         if (requestId != null) {
             // 找到等待这个响应的请求
             pendingRequests.removeIf(req -> req.requestId.equals(requestId));
+
+            // 通知 HTTP 处理器
+            if (responseCallback != null) {
+                responseCallback.onResponse(requestId, msg);
+            }
         }
         return null; // 响应已经通过 HTTP 返回给客户端了
     }

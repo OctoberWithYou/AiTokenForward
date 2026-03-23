@@ -15,6 +15,8 @@ import javax.net.ssl.*;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.channels.*;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
 import java.security.MessageDigest;
@@ -30,6 +32,7 @@ public class Server {
     private static final Logger logger = LoggerFactory.getLogger(Server.class);
 
     private static final String WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+    private static final int WEBSOCKET_BUFFER_SIZE = 16384;
 
     private final ServerConfig config;
     private final AgentManager agentManager;
@@ -37,6 +40,12 @@ public class Server {
     private final AuthManager authManager;
     private final ClientHttpHandler clientHandler;
     private HttpServer httpServer;
+
+    // NIO WebSocket server
+    private ServerSocketChannel wsServerChannel;
+    private Selector wsSelector;
+    private Thread wsServerThread;
+    private volatile boolean running = true;
 
     // 活跃的 WebSocket 会话
     private final ConcurrentHashMap<String, WebSocketSessionImpl> webSocketSessions = new ConcurrentHashMap<>();
@@ -66,6 +75,11 @@ public class Server {
         this.authManager.init(apiKeys, tokenFile, headerName);
 
         this.clientHandler = new ClientHttpHandler(authManager, agentManager, agentHandler);
+
+        // 设置响应回调 - 将 Agent 的响应路由到 ClientHttpHandler
+        agentHandler.setResponseCallback((requestId, response) -> {
+            clientHandler.onAgentResponse(requestId, response);
+        });
     }
 
     public void start() throws IOException {
@@ -83,7 +97,10 @@ public class Server {
             startHttpServer(host, port);
         }
 
-        logger.info("Server started on {}:{}", host, port);
+        // 启动 NIO WebSocket 服务器
+        startWebSocketServer(host, port + 1);
+
+        logger.info("Server started on {}:{} (HTTP) and {}:{} (WebSocket)", host, port, host, port + 1);
     }
 
     private void startHttpServer(String host, int port) throws IOException {
@@ -93,8 +110,12 @@ public class Server {
         // 添加 HTTP 处理器
         httpServer.createContext("/", clientHandler);
 
-        // 添加 WebSocket 升级处理器
-        httpServer.createContext("/agent", new AgentWebSocketHttpHandler());
+        // WebSocket 升级处理器 - 重定向到 NIO WebSocket 服务器
+        httpServer.createContext("/agent", exchange -> {
+            // 返回 400，要求客户端连接到 WebSocket 端口
+            exchange.getResponseHeaders().set("X-WebSocket-Port", String.valueOf(port + 1));
+            exchange.sendResponseHeaders(400, -1);
+        });
 
         httpServer.start();
     }
@@ -118,12 +139,313 @@ public class Server {
         });
 
         httpsServer.createContext("/", clientHandler);
-        httpsServer.createContext("/agent", new AgentWebSocketHttpHandler());
+        httpsServer.createContext("/agent", exchange -> {
+            exchange.getResponseHeaders().set("X-WebSocket-Port", String.valueOf(port + 1));
+            exchange.sendResponseHeaders(400, -1);
+        });
 
         httpsServer.start();
 
         this.httpServer = httpsServer;
         logger.info("HTTPS Server started on {}:{}", host, port);
+    }
+
+    private void startWebSocketServer(String host, int port) throws IOException {
+        try {
+            wsSelector = Selector.open();
+            wsServerChannel = ServerSocketChannel.open();
+            wsServerChannel.bind(new InetSocketAddress(host, port));
+            wsServerChannel.configureBlocking(false);
+            wsServerChannel.register(wsSelector, SelectionKey.OP_ACCEPT);
+
+            wsServerThread = new Thread(this::runWebSocketServer, "WebSocket-Server");
+            wsServerThread.start();
+
+            // Give the thread time to start
+            Thread.sleep(100);
+
+            logger.info("WebSocket server started on port {}", port);
+        } catch (Exception e) {
+            logger.error("Failed to start WebSocket server: {}", e.getMessage(), e);
+            throw new IOException("WebSocket server failed to start", e);
+        }
+    }
+
+    private void runWebSocketServer() {
+        while (running) {
+            try {
+                wsSelector.select(100);
+
+                Set<SelectionKey> selectedKeys = wsSelector.selectedKeys();
+                for (SelectionKey key : selectedKeys) {
+                    try {
+                        if (key.isAcceptable()) {
+                            acceptConnection(key);
+                        } else if (key.isReadable()) {
+                            readFrame(key);
+                        } else if (key.isWritable()) {
+                            // Handle writeable state if needed
+                        }
+                    } catch (Exception e) {
+                        logger.error("Error processing WebSocket key: {}", e.getMessage());
+                        closeConnection(key);
+                    }
+                }
+                selectedKeys.clear();
+            } catch (IOException e) {
+                if (running) {
+                    logger.error("WebSocket server error: {}", e.getMessage());
+                }
+            }
+        }
+    }
+
+    private void acceptConnection(SelectionKey key) throws IOException {
+        ServerSocketChannel server = (ServerSocketChannel) key.channel();
+        SocketChannel client = server.accept();
+        if (client != null) {
+            client.configureBlocking(false);
+            client.register(wsSelector, SelectionKey.OP_READ);
+            logger.debug("New WebSocket connection from {}", client.getRemoteAddress());
+        }
+    }
+
+    private void readFrame(SelectionKey key) throws IOException {
+        SocketChannel client = (SocketChannel) key.channel();
+        ByteBuffer buffer = ByteBuffer.allocate(WEBSOCKET_BUFFER_SIZE);
+
+        int bytesRead = client.read(buffer);
+        if (bytesRead == -1) {
+            // Client closed connection
+            closeConnection(key);
+            return;
+        }
+
+        if (bytesRead > 0) {
+            buffer.flip();
+            byte[] data = new byte[buffer.remaining()];
+            buffer.get(data);
+
+            logger.debug("Received {} bytes from {}", bytesRead, client.getRemoteAddress());
+
+            // 检查是否是 HTTP 握手请求
+            String request = new String(data, StandardCharsets.UTF_8);
+            if (request.startsWith("GET")) {
+                handleHttpHandshake(client, request);
+            } else {
+                // 解析 WebSocket 帧
+                String text = parseWebSocketFrame(data, client);
+                if (text != null && !text.isEmpty()) {
+                    logger.debug("Parsed WebSocket message: {}", text.substring(0, Math.min(100, text.length())));
+                    handleWebSocketMessage(key, client, text);
+                }
+            }
+        }
+    }
+
+    private void handleHttpHandshake(SocketChannel client, String request) throws IOException {
+        // 解析 WebSocket 密钥
+        String key = null;
+        for (String line : request.split("\r\n")) {
+            if (line.toLowerCase().startsWith("sec-websocket-key:")) {
+                key = line.substring(line.indexOf(":") + 1).trim();
+                break;
+            }
+        }
+
+        if (key == null) {
+            client.close();
+            return;
+        }
+
+        // 生成响应
+        String acceptKey = generateAcceptKey(key);
+        String response = "HTTP/1.1 101 Switching Protocols\r\n" +
+                "Upgrade: websocket\r\n" +
+                "Connection: Upgrade\r\n" +
+                "Sec-WebSocket-Accept: " + acceptKey + "\r\n" +
+                "Sec-WebSocket-Version: 13\r\n" +
+                "\r\n";
+
+        ByteBuffer responseBuffer = ByteBuffer.wrap(response.getBytes(StandardCharsets.UTF_8));
+        while (responseBuffer.hasRemaining()) {
+            client.write(responseBuffer);
+        }
+
+        // 创建会话
+        String sessionId = UUID.randomUUID().toString();
+        WebSocketSessionImpl session = new WebSocketSessionImpl(sessionId, client, key);
+        webSocketSessions.put(sessionId, session);
+
+        logger.info("WebSocket connection established: {}", sessionId);
+
+        // 通知 handler
+        client.register(wsSelector, SelectionKey.OP_READ);
+        agentHandler.handleOpen(sessionId, session);
+    }
+
+    private static final int OP_TEXT = 0x1;
+    private static final int OP_BINARY = 0x2;
+    private static final int OP_CLOSE = 0x8;
+    private static final int OP_PING = 0x9;
+    private static final int OP_PONG = 0xA;
+
+    // Parse WebSocket frame and return text, or null for close/control frames
+    // Returns "" for ping frames (caller should respond with pong)
+    // Returns null for close frames
+    private String parseWebSocketFrame(byte[] data, SocketChannel client) throws IOException {
+        if (data.length < 2) return null;
+
+        int firstByte = data[0] & 0xFF;
+        int secondByte = data[1] & 0xFF;
+
+        int opcode = firstByte & 0x0F;
+        // 0x8 = close frame
+        if (opcode == OP_CLOSE) {
+            return null;
+        }
+
+        // 0x9 = ping frame - respond with pong
+        if (opcode == OP_PING) {
+            sendPongFrame(client);
+            return ""; // Return empty to indicate ping was handled
+        }
+
+        // 0xA = pong frame - ignore
+        if (opcode == OP_PONG) {
+            return "";
+        }
+
+        // Only handle text frames for now
+        if (opcode != OP_TEXT && opcode != OP_BINARY) {
+            return "";
+        }
+
+        boolean masked = (secondByte & 0x80) != 0;
+        long payloadLength = secondByte & 0x7F;
+
+        int offset = 2;
+        if (payloadLength == 126) {
+            if (data.length < 4) return null;
+            payloadLength = ((data[2] & 0xFF) << 8) | (data[3] & 0xFF);
+            offset = 4;
+        } else if (payloadLength == 127) {
+            if (data.length < 10) return null;
+            payloadLength = 0;
+            for (int i = 0; i < 8; i++) {
+                payloadLength = (payloadLength << 8) | (data[2 + i] & 0xFF);
+            }
+            offset = 10;
+        }
+
+        byte[] mask = null;
+        if (masked) {
+            if (data.length < offset + 4) return null;
+            mask = new byte[4];
+            System.arraycopy(data, offset, mask, 0, 4);
+            offset += 4;
+        }
+
+        if (data.length < offset + payloadLength) return null;
+
+        byte[] payload = new byte[(int) payloadLength];
+        System.arraycopy(data, offset, payload, 0, (int) payloadLength);
+
+        if (masked) {
+            for (int i = 0; i < payload.length; i++) {
+                payload[i] ^= mask[i % 4];
+            }
+        }
+
+        return new String(payload, StandardCharsets.UTF_8);
+    }
+
+    private void sendPongFrame(SocketChannel client) throws IOException {
+        // Pong frame: opcode 0xA, no payload
+        ByteBuffer buffer = ByteBuffer.wrap(new byte[]{(byte)0x8A, 0x00});
+        while (buffer.hasRemaining()) {
+            client.write(buffer);
+        }
+    }
+
+    private void handleWebSocketMessage(SelectionKey key, SocketChannel client, String text) {
+        // 找到对应的会话
+        String sessionId = null;
+        for (var entry : webSocketSessions.entrySet()) {
+            if (entry.getValue().channel == client) {
+                sessionId = entry.getKey();
+                break;
+            }
+        }
+
+        logger.debug("Handling WebSocket message for session: {}", sessionId);
+
+        if (sessionId != null) {
+            WebSocketSessionImpl session = webSocketSessions.get(sessionId);
+            Message response = agentHandler.handleMessage(sessionId, text, session);
+            if (response != null) {
+                try {
+                    String json = ConfigLoader.toJson(response);
+                    sendWebSocketFrame(client, json);
+                } catch (IOException e) {
+                    logger.error("Failed to send response: {}", e.getMessage());
+                }
+            }
+        }
+    }
+
+    private void sendWebSocketFrame(SocketChannel client, String text) throws IOException {
+        byte[] textBytes = text.getBytes(StandardCharsets.UTF_8);
+        int length = textBytes.length;
+
+        ByteBuffer buffer;
+        if (length <= 125) {
+            buffer = ByteBuffer.allocate(2 + length);
+            buffer.put((byte) 0x81); // Text frame
+            buffer.put((byte) length);
+        } else if (length <= 65535) {
+            buffer = ByteBuffer.allocate(4 + length);
+            buffer.put((byte) 0x81); // Text frame
+            buffer.put((byte) 126);
+            buffer.put((byte) (length >> 8));
+            buffer.put((byte) (length & 0xFF));
+        } else {
+            buffer = ByteBuffer.allocate(10 + length);
+            buffer.put((byte) 0x81); // Text frame
+            buffer.put((byte) 127);
+            for (int i = 7; i >= 0; i--) {
+                buffer.put((byte) ((length >> (i * 8)) & 0xFF));
+            }
+        }
+
+        buffer.put(textBytes);
+        buffer.flip();
+
+        while (buffer.hasRemaining()) {
+            client.write(buffer);
+        }
+    }
+
+    private void closeConnection(SelectionKey key) {
+        try {
+            String sessionId = null;
+            for (var entry : webSocketSessions.entrySet()) {
+                if (entry.getValue().channel == key.channel()) {
+                    sessionId = entry.getKey();
+                    break;
+                }
+            }
+
+            if (sessionId != null) {
+                webSocketSessions.remove(sessionId);
+                agentHandler.handleClose(sessionId);
+            }
+
+            key.cancel();
+            key.channel().close();
+        } catch (IOException e) {
+            logger.debug("Error closing connection: {}", e.getMessage());
+        }
     }
 
     private SSLContext createSslContext(ServerConfig.SslSettings sslSettings) throws IOException {
@@ -147,47 +469,30 @@ public class Server {
     }
 
     public void stop() {
+        running = false;
+
+        // 关闭 WebSocket 服务器
+        if (wsSelector != null) {
+            wsSelector.wakeup();
+        }
+        if (wsServerThread != null) {
+            wsServerThread.interrupt();
+        }
+        try {
+            if (wsServerChannel != null) {
+                wsServerChannel.close();
+            }
+            if (wsSelector != null) {
+                wsSelector.close();
+            }
+        } catch (IOException e) {
+            logger.debug("Error closing WebSocket server: {}", e.getMessage());
+        }
+
+        // 关闭 HTTP 服务器
         if (httpServer != null) {
             httpServer.stop(0);
             logger.info("Server stopped");
-        }
-    }
-
-    // WebSocket HTTP 处理器 - 处理握手
-    private class AgentWebSocketHttpHandler implements HttpHandler {
-        @Override
-        public void handle(HttpExchange exchange) throws IOException {
-            String upgrade = exchange.getRequestHeaders().getFirst("Upgrade");
-            if (upgrade == null || !upgrade.equalsIgnoreCase("websocket")) {
-                exchange.sendResponseHeaders(400, -1);
-                return;
-            }
-
-            String key = exchange.getRequestHeaders().getFirst("Sec-WebSocket-Key");
-            if (key == null) {
-                exchange.sendResponseHeaders(400, -1);
-                return;
-            }
-
-            // 生成 accept 密钥
-            String acceptKey = generateAcceptKey(key);
-
-            // 发送 101 切换协议响应
-            exchange.getResponseHeaders().set("Upgrade", "websocket");
-            exchange.getResponseHeaders().set("Connection", "Upgrade");
-            exchange.getResponseHeaders().set("Sec-WebSocket-Accept", acceptKey);
-            exchange.getResponseHeaders().set("Sec-WebSocket-Version", "13");
-            exchange.sendResponseHeaders(101, -1);
-
-            // 创建 WebSocket 会话
-            String sessionId = UUID.randomUUID().toString();
-            WebSocketSessionImpl session = new WebSocketSessionImpl(sessionId);
-            webSocketSessions.put(sessionId, session);
-
-            logger.info("WebSocket connection established: {}", sessionId);
-
-            // 通知 handler 有新连接
-            agentHandler.handleOpen(sessionId, session);
         }
     }
 
@@ -205,10 +510,14 @@ public class Server {
     // WebSocket 会话实现
     private class WebSocketSessionImpl implements Message.WebSocketSession {
         private final String sessionId;
+        final SocketChannel channel;
         private volatile boolean open = true;
+        private final String key;
 
-        public WebSocketSessionImpl(String sessionId) {
+        public WebSocketSessionImpl(String sessionId, SocketChannel channel, String key) {
             this.sessionId = sessionId;
+            this.channel = channel;
+            this.key = key;
         }
 
         public String getSessionId() {
@@ -220,15 +529,19 @@ public class Server {
             if (!open) {
                 throw new IOException("Session is closed");
             }
-            // 这里需要实现完整的 WebSocket 帧发送
-            // 简化实现：实际应该使用 javax.websocket 或其他 WebSocket 库
-            logger.debug("Sending WebSocket message: {}", text.substring(0, Math.min(100, text.length())));
+            sendWebSocketFrame(channel, text);
+            logger.debug("Sent WebSocket message: {}", text.substring(0, Math.min(100, text.length())));
         }
 
         public void close() {
             open = false;
             webSocketSessions.remove(sessionId);
             agentHandler.handleClose(sessionId);
+            try {
+                channel.close();
+            } catch (IOException e) {
+                logger.debug("Error closing channel: {}", e.getMessage());
+            }
         }
 
         public boolean isOpen() {

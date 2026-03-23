@@ -9,16 +9,15 @@
 - 导致 Agent 未被正确注册到 AgentManager
 
 ### 根本原因
-Server.java 中 `AgentWebSocketHttpHandler` 只处理了 WebSocket 握手(升级协议)，在发送 101 响应后没有：
-1. 获取底层 socket 连接 (Java 21 限制)
-2. 启动线程读取 WebSocket 帧数据
-3. 调用 `agentHandler.handleMessage()` 处理接收到的消息
+Server.java 中 `AgentWebSocketHttpHandler` 只处理了 WebSocket 握手(升级协议)，在发送 101 响应后没有启动线程读取 WebSocket 帧数据。
 
-### 尝试的修复方案
-1. 使用反射获取 HttpExchange 底层 socket - 失败 (Java 21 限制)
-2. 使用 Java-WebSocket 库 - 编译失败 (jar 打包方式问题)
+### 修复方案
+1. 使用 Java NIO (Selector/ServerSocketChannel) 实现独立的 WebSocket 服务器
+2. 在端口 HTTP 端口 + 1 上启动 WebSocket 服务器
+3. 实现完整的 WebSocket 帧解析（支持 text、binary、ping、pong、close 帧）
+4. 添加回调机制将 Agent 响应路由到 ClientHttpHandler 完成 HTTP 请求
 
-### 状态: 待修复
+### 状态: 已修复 ✓
 
 ---
 
@@ -29,9 +28,24 @@ Server.java 中 `AgentWebSocketHttpHandler` 只处理了 WebSocket 握手(升级
 - 日志显示 "Agent connected" 但没有 "Agent registered successfully"
 
 ### 根本原因
-与 Bug #1 相关 - Agent 的注册消息从未到达 handleRegister 方法
+与 Bug #1 相关 - Agent 的注册消息从未到达 handleRegister 方法。修复 Bug #1 后，还需要修复响应回调未连接的问题：
+- ClientHttpHandler.onAgentResponse() 方法存在但从未被调用
+- AgentWebSocketHandler 处理响应后没有通知 ClientHttpHandler
 
 ### 修复方案
-修复 Bug #1 后自动解决
+1. 在 AgentWebSocketHandler 中添加 ResponseCallback 接口
+2. 在 Server 构造函数中将 callback 连接到 clientHandler.onAgentResponse()
 
-### 状态: 待修复 (依赖 Bug #1)
+### 状态: 已修复 ✓
+
+---
+
+## 验证结果
+- 集成测试: 7/7 通过
+- testServerHealthCheck: PASSED
+- testServerNotFound: PASSED
+- testChatCompletionsWithoutToken: PASSED
+- testChatCompletionsWithInvalidToken: PASSED
+- testChatCompletionsWithValidToken: PASSED
+- testEmbeddingsWithValidToken: PASSED
+- testListModels: PASSED
