@@ -1,20 +1,13 @@
 plugins {
+    id 'java'
     id 'application'
 }
 
-application {
-    mainClass = 'org.ljc.configtool.ConfigTool'
-}
+group = 'org.ljc'
+version = rootProject.version
 
-jar {
-    archiveBaseName = 'config-tool'
-    manifest {
-        attributes 'Main-Class': 'org.ljc.configtool.ConfigTool'
-    }
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    from {
-        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
-    }
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
 }
 
 repositories {
@@ -24,4 +17,36 @@ repositories {
 dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.16.0'
     implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.16.0'
+    implementation 'org.eclipse.jetty:jetty-server:11.0.20'
+    implementation 'org.eclipse.jetty:jetty-servlet:11.0.20'
+    implementation 'org.eclipse.jetty:jetty-webapp:11.0.20'
+    implementation 'jakarta.servlet:jakarta.servlet-api:5.0.0'
+}
+
+tasks.register('buildFrontend', Exec) {
+    group = 'build'
+    description = 'Build React frontend'
+
+    def npmCmd = System.getProperty('os.name').toLowerCase().contains('windows') ? 'npm.cmd' : 'npm'
+    workingDir = file("${projectDir}/src/main/frontend")
+
+    commandLine npmCmd, 'install', '--legacy-peer-deps'
+    doLast {
+        commandLine npmCmd, 'run', 'build'
+    }
+}
+
+application {
+    mainClass = 'org.ljc.configtool.ConfigToolApplication'
+}
+
+jar {
+    archiveBaseName = 'config-tool'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    manifest {
+        attributes 'Main-Class': 'org.ljc.configtool.ConfigToolApplication'
+    }
 }

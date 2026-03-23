@@ -57,6 +57,44 @@ Server.java 中 `AgentWebSocketHttpHandler` 只处理了 WebSocket 握手(升级
 
 ---
 
+## Bug #4: 缺少界面化配置工具 (前后端分离架构)
+
+### 问题描述
+- 需要图形化界面配置工具,原实现为嵌入式 Java HttpServer + 内联 HTML
+- 用户要求使用 Web 技术,前端用 React,后端用 Spring
+
+### 根本原因
+- 原有 config-tool 使用简单的嵌入式 HttpServer
+- 未采用前后端分离架构
+
+### 修复方案
+1. 前端: 使用 React + Vite 构建现代化 UI
+2. 后端: 使用 Jetty 11 (轻量化,替代 Spring Boot)
+3. 实现 REST API: GET/POST /api/server, GET/POST /api/agent
+4. 支持在线编辑和保存 server.yaml、agent.yaml 配置文件
+
+### 状态: 已修复 ✓
+
+---
+
+## Bug #5: 缺少新特性用例看护规则
+
+### 问题描述
+- 新功能没有对应的测试用例看护
+- 需要建立规范:每个新功能必须添加对应的集成测试
+
+### 根本原因
+- 项目规范中未明确要求新功能必须添加测试
+
+### 修复方案
+- 在 CLAUDE.md 中添加规则:新特性与用例看护
+- 要求每个新功能必须添加集成测试用例
+- 测试覆盖:功能正常场景、边界条件和异常场景
+
+### 状态: 已修复 ✓
+
+---
+
 ## 验证结果
 - 集成测试: 7/7 通过
 - testServerHealthCheck: PASSED

@@ -31,7 +31,8 @@ dist/
 │   └── agent.yaml          # 代理配置模板
 ├── libs/
 │   ├── forward-server-${version}.jar
-│   └── forward-agent-${version}.jar
+│   ├── forward-agent-${version}.jar
+│   └── config-tool.jar    # 图形化配置工具
 ├── start.bat               # Windows 启动脚本
 ├── start.sh                # Linux 启动脚本
 └── README.txt
@@ -171,7 +172,26 @@ reconnect:
 
 ## 启动步骤
 
-### 1. 准备配置文件
+### 方式一：使用图形化配置工具 (推荐)
+
+系统提供了中文图形界面配置工具,通过 Web 浏览器访问。
+
+**启动配置工具**:
+```bash
+cd libs
+java -jar config-tool.jar
+```
+
+然后在浏览器中打开: **http://localhost:8888**
+
+配置工具功能:
+- 服务器配置 (端口、SSL、认证、Agent设置)
+- 客户端配置 (WebSocket地址、模型配置)
+- 一键保存配置文件
+
+### 方式二：手动配置
+
+**准备配置文件**:
 
 在 dist 目录下创建实际使用的配置文件:
 

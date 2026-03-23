@@ -96,6 +96,10 @@ tasks.register('dist') {
             from "agent/build/libs/forward-agent-${version}.jar"
             into "dist/libs/"
         }
+        copy {
+            from "config-tool/build/libs/config-tool-${version}.jar"
+            into "dist/libs/"
+        }
 
         copy {
             from "server/src/main/resources/config/server-config.yaml"
