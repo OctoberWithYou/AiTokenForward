@@ -30,7 +30,6 @@ public class IntegrationTest {
     static void setUp() throws Exception {
         logger.info("Starting integration test setup...");
 
-        // Create HTTP client
         httpClient = new OkHttpClient.Builder()
                 .connectTimeout(30, TimeUnit.SECONDS)
                 .readTimeout(60, TimeUnit.SECONDS)
@@ -41,35 +40,34 @@ public class IntegrationTest {
         mockApiServer.start();
         logger.info("Mock API server started on port 9999");
 
-        // Get JAR paths from build output
+        // Get JAR paths
         String serverJar = findJar("forward-server");
         String agentJar = findJar("forward-agent");
 
         logger.info("Server JAR: {}", serverJar);
         logger.info("Agent JAR: {}", agentJar);
 
-        // Start processes
+        // Start server and agent
         pm = new ProcessManager();
+        String configDir = getConfigDir();
+        pm.startServer(serverJar, configDir + "/server.yaml");
+        logger.info("Server started on port 18080");
 
-        // Use paths for test config
+        pm.startAgent(agentJar, configDir + "/agent.yaml");
+        logger.info("Agent started");
+
+        Thread.sleep(3000);
+        logger.info("Setup complete, starting tests");
+    }
+
+    private static String getConfigDir() {
         String configDir = System.getProperty("user.dir");
         if (configDir.contains("integration-test")) {
             configDir = configDir.substring(0, configDir.indexOf("integration-test")) + "integration-test/src/test/resources/config";
         } else {
             configDir = configDir + "/integration-test/src/test/resources/config";
         }
-        configDir = configDir.replace("\\", "/");
-        pm.startServer(serverJar, configDir + "/server.yaml");
-        logger.info("Server started");
-
-        // Update agent config to use mock API
-        String agentConfig = configDir + "/agent.yaml";
-        pm.startAgent(agentJar, agentConfig);
-        logger.info("Agent started");
-
-        // Wait for connection
-        Thread.sleep(3000);
-        logger.info("Setup complete, starting tests");
+        return configDir.replace("\\", "/");
     }
 
     @AfterAll
@@ -85,11 +83,8 @@ public class IntegrationTest {
     }
 
     private static String findJar(String prefix) throws IOException {
-        // Get project root from Gradle property or use a fixed approach
         String rootPath = System.getProperty("project.root",
             System.getProperty("user.dir").replace("\\", "/"));
-
-        // Ensure we have the root path
         if (rootPath.contains("integration-test")) {
             rootPath = rootPath.substring(0, rootPath.indexOf("integration-test"));
         }
@@ -97,9 +92,6 @@ public class IntegrationTest {
             rootPath = rootPath + "/";
         }
 
-        logger.info("Searching for JAR prefix: {} in root: {}", prefix, rootPath);
-
-        // Search in multiple locations
         String[] dirs = {
             rootPath + "server/build/libs/",
             rootPath + "agent/build/libs/"
@@ -107,29 +99,26 @@ public class IntegrationTest {
 
         for (String dirPath : dirs) {
             java.io.File dir = new java.io.File(dirPath);
-            logger.info("Checking: {} exists={}", dirPath, dir.exists());
             if (dir.exists() && dir.isDirectory()) {
                 java.io.File[] files = dir.listFiles((d, name) ->
                     name.startsWith(prefix) && name.endsWith(".jar") && !name.contains("-sources"));
                 if (files != null && files.length > 0) {
-                    // Sort by last modified, get latest
                     java.io.File latest = files[0];
                     for (java.io.File f : files) {
                         if (f.lastModified() > latest.lastModified()) {
                             latest = f;
                         }
                     }
-                    logger.info("Found JAR: {}", latest.getAbsolutePath());
                     return latest.getAbsolutePath();
                 }
             }
         }
-        throw new IOException("Could not find JAR for: " + prefix + " in " + rootPath);
+        throw new IOException("Could not find JAR for: " + prefix);
     }
 
+    // ========== Server Tests ==========
+
     @Test
-    
-    
     void testServerHealthCheck() throws IOException {
         Request request = new Request.Builder()
                 .url(SERVER_URL + "/health")
@@ -138,14 +127,68 @@ public class IntegrationTest {
 
         try (Response response = httpClient.newCall(request).execute()) {
             logger.info("Health check response: {}", response.code());
-            // Health endpoint may or may not exist, just verify server is responding
             assertNotNull(response);
         }
     }
 
     @Test
-    
-    
+    void testServerNotFound() throws IOException {
+        Request request = new Request.Builder()
+                .url(SERVER_URL + "/nonexistent")
+                .addHeader("X-Auth-Token", VALID_TOKEN)
+                .get()
+                .build();
+
+        try (Response response = httpClient.newCall(request).execute()) {
+            logger.info("Not found response: {}", response.code());
+            assertEquals(404, response.code(), "Should return 404 for nonexistent endpoint");
+        }
+    }
+
+    // ========== Authentication Tests ==========
+
+    @Test
+    void testChatCompletionsWithoutToken() throws IOException {
+        String jsonBody = "{" +
+                "\"model\": \"test-model\"," +
+                "\"messages\": [{\"role\": \"user\", \"content\": \"Hello\"}]" +
+                "}";
+
+        Request request = new Request.Builder()
+                .url(SERVER_URL + "/v1/chat/completions")
+                .addHeader("Content-Type", "application/json")
+                .post(RequestBody.create(jsonBody, MediaType.parse("application/json")))
+                .build();
+
+        try (Response response = httpClient.newCall(request).execute()) {
+            logger.info("No token response: {}", response.code());
+            assertEquals(401, response.code(), "Should return 401 without token");
+        }
+    }
+
+    @Test
+    void testChatCompletionsWithInvalidToken() throws IOException {
+        String jsonBody = "{" +
+                "\"model\": \"test-model\"," +
+                "\"messages\": [{\"role\": \"user\", \"content\": \"Hello\"}]" +
+                "}";
+
+        Request request = new Request.Builder()
+                .url(SERVER_URL + "/v1/chat/completions")
+                .addHeader("Content-Type", "application/json")
+                .addHeader("X-Auth-Token", "invalid-token")
+                .post(RequestBody.create(jsonBody, MediaType.parse("application/json")))
+                .build();
+
+        try (Response response = httpClient.newCall(request).execute()) {
+            logger.info("Invalid token response: {}", response.code());
+            assertEquals(401, response.code(), "Should return 401 with invalid token");
+        }
+    }
+
+    // ========== Chat Completions Tests ==========
+
+    @Test
     void testChatCompletionsWithValidToken() throws IOException {
         String jsonBody = "{" +
                 "\"model\": \"test-model\"," +
@@ -171,56 +214,12 @@ public class IntegrationTest {
         }
     }
 
-    @Test
-    
-    
-    void testChatCompletionsWithInvalidToken() throws IOException {
-        String jsonBody = "{" +
-                "\"model\": \"test-model\"," +
-                "\"messages\": [{\"role\": \"user\", \"content\": \"Hello!\"}]" +
-                "}";
-
-        Request request = new Request.Builder()
-                .url(SERVER_URL + "/v1/chat/completions")
-                .addHeader("Content-Type", "application/json")
-                .addHeader("X-Auth-Token", "invalid-token")
-                .post(RequestBody.create(jsonBody, MediaType.parse("application/json")))
-                .build();
-
-        try (Response response = httpClient.newCall(request).execute()) {
-            logger.info("Invalid token response: {}", response.code());
-            // Should return 401 Unauthorized
-            assertEquals(401, response.code(), "Should return 401 with invalid token");
-        }
-    }
+    // ========== Embeddings Tests ==========
 
     @Test
-    
-    
-    void testChatCompletionsWithoutToken() throws IOException {
-        String jsonBody = "{" +
-                "\"model\": \"test-model\"," +
-                "\"messages\": [{\"role\": \"user\", \"content\": \"Hello!\"}]" +
-                "}";
-
-        Request request = new Request.Builder()
-                .url(SERVER_URL + "/v1/chat/completions")
-                .addHeader("Content-Type", "application/json")
-                .post(RequestBody.create(jsonBody, MediaType.parse("application/json")))
-                .build();
-
-        try (Response response = httpClient.newCall(request).execute()) {
-            logger.info("No token response: {}", response.code());
-            assertEquals(401, response.code(), "Should return 401 without token");
-        }
-    }
-
-    @Test
-    
-    
     void testEmbeddingsWithValidToken() throws IOException {
         String jsonBody = "{" +
-                "\"model\": \"test-model\"," +
+                "\"model\": \"text-embedding-ada-002\"," +
                 "\"input\": \"Hello world\"" +
                 "}";
 
@@ -242,9 +241,9 @@ public class IntegrationTest {
         }
     }
 
+    // ========== Models Tests ==========
+
     @Test
-    
-    
     void testListModels() throws IOException {
         Request request = new Request.Builder()
                 .url(SERVER_URL + "/v1/models")
@@ -260,22 +259,6 @@ public class IntegrationTest {
             assertEquals(200, response.code(), "Should return 200 for list models");
             assertNotNull(body);
             assertTrue(body.contains("data") || body.contains("models"));
-        }
-    }
-
-    @Test
-    
-    
-    void testServerNotFound() throws IOException {
-        Request request = new Request.Builder()
-                .url(SERVER_URL + "/nonexistent")
-                .addHeader("X-Auth-Token", VALID_TOKEN)
-                .get()
-                .build();
-
-        try (Response response = httpClient.newCall(request).execute()) {
-            logger.info("Not found response: {}", response.code());
-            assertEquals(404, response.code(), "Should return 404 for nonexistent endpoint");
         }
     }
 }

@@ -68,6 +68,20 @@ public class MockApiServer {
             }
         });
 
+        // Completions endpoint
+        server.createContext("/v1/completions", exchange -> {
+            try {
+                String requestBody = new String(exchange.getRequestBody().readAllBytes());
+                logger.info("Mock API received completions request: {}", requestBody);
+
+                String response = createCompletionsResponse();
+                sendJsonResponse(exchange, response, 200);
+            } catch (Exception e) {
+                logger.error("Error handling completions request", e);
+                sendJsonError(exchange, e.getMessage(), 500);
+            }
+        });
+
         server.setExecutor(null);
         server.start();
         logger.info("Mock API Server started on port {}", port);
@@ -138,6 +152,29 @@ public class MockApiServer {
                 "owned_by", "test"
             )
         });
+
+        return jsonMapper.writeValueAsString(response);
+    }
+
+    private String createCompletionsResponse() throws IOException {
+        Map<String, Object> response = new HashMap<>();
+        response.put("id", "cmpl-mock-123");
+        response.put("object", "text_completion");
+        response.put("created", System.currentTimeMillis() / 1000);
+        response.put("model", "text-davinci-003");
+
+        Map<String, Object> choice = new HashMap<>();
+        choice.put("text", "This is a mock completion response.");
+        choice.put("index", 0);
+        choice.put("finish_reason", "stop");
+
+        response.put("choices", new Object[]{choice});
+
+        Map<String, Object> usage = new HashMap<>();
+        usage.put("prompt_tokens", 5);
+        usage.put("completion_tokens", 10);
+        usage.put("total_tokens", 15);
+        response.put("usage", usage);
 
         return jsonMapper.writeValueAsString(response);
     }

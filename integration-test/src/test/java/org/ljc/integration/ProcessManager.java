@@ -119,6 +119,49 @@ public class ProcessManager {
     }
 
     /**
+     * Start the config-tool process using the built JAR
+     */
+    public void startConfigTool(String configToolJarPath) throws IOException {
+        logger.info("Starting config-tool: {}", configToolJarPath);
+
+        String projectRoot = System.getProperty("user.dir");
+        if (projectRoot.contains("integration-test")) {
+            projectRoot = projectRoot.substring(0, projectRoot.indexOf("integration-test"));
+        }
+        projectRoot = projectRoot.replace("\\", "/");
+
+        List<String> command = new ArrayList<>();
+        command.add("java");
+        command.add("-jar");
+        command.add(configToolJarPath);
+
+        ProcessBuilder pb = new ProcessBuilder(command);
+        pb.directory(new File(projectRoot));
+        pb.redirectErrorStream(true);
+
+        pb.environment().put("JAVA_TOOL_OPTIONS", "-Duser.dir=" + projectRoot);
+
+        Process configToolProcess = pb.start();
+        processes.add(configToolProcess);
+
+        // Log output in background thread
+        new Thread(() -> {
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(configToolProcess.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    logger.info("[ConfigTool] {}", line);
+                }
+            } catch (IOException e) {
+                logger.error("Error reading config-tool output", e);
+            }
+        }).start();
+
+        // Wait for config-tool to start
+        waitForPort("127.0.0.1", 18888, 30);
+        logger.info("Config-tool started successfully");
+    }
+
+    /**
      * Wait for a port to be available
      */
     private void waitForPort(String host, int port, int timeoutSeconds) {

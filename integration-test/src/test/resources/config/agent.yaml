@@ -16,5 +16,10 @@ models:
     endpoint: "http://127.0.0.1:9999"
     apiKey: "test-key"
 
+  - id: "text-davinci-003"
+    provider: "openai"
+    endpoint: "http://127.0.0.1:9999"
+    apiKey: "test-key"
+
 reconnect:
   enabled: false
