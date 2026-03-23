@@ -67,6 +67,7 @@ gradle :agent:build
 构建产物位于：
 - `server/build/libs/forward-server-1.0-SNAPSHOT.jar`
 - `agent/build/libs/forward-agent-1.0-SNAPSHOT.jar`
+- `config-tool/build/libs/config-tool-1.0-SNAPSHOT.jar` (图形化配置工具)
 
 ### 配置说明
 
@@ -202,6 +203,12 @@ Forward/
 │   │       └── common/        # 通用类
 │   └── src/main/resources/
 │       └── config/           # 配置文件
+├── config-tool/               # 图形化配置工具
+│   ├── src/main/
+│   │   ├── java/              # Jetty 后端
+│   │   └── frontend/          # React 前端
+│   └── build/libs/           # 打包产物
+├── integration-test/          # 集成测试
 ├── build.gradle               # 根构建配置
 └── settings.gradle            # 项目设置
 ```
@@ -215,7 +222,32 @@ gradle test
 # 运行特定模块测试
 gradle :server:test
 gradle :agent:test
+
+# 运行集成测试
+gradle integrationTest
 ```
+
+## 图形化配置工具 (推荐)
+
+系统提供 Web 版图形界面配置工具,无需手动编辑 YAML 配置文件。
+
+### 启动配置工具
+
+```bash
+# 构建配置工具
+gradle :config-tool:build
+
+# 启动
+java -jar config-tool/build/libs/config-tool.jar
+```
+
+然后在浏览器打开: **http://localhost:8888**
+
+### 功能特性
+- 中文 Web 界面
+- 服务器配置 (端口、SSL、认证、Agent设置)
+- 客户端配置 (WebSocket地址、模型配置)
+- 一键保存配置文件 (server.yaml、agent.yaml)
 
 ## 安全注意事项
 
