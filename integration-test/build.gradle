@@ -51,7 +51,7 @@ tasks.named('test') {
 
 tasks.register('integrationTest', Test) {
     group = 'integration'
-    description = 'Run integration tests against built JARs'
+    description = 'Run integration tests against built JARs and generate Allure report'
     dependsOn ':server:build', ':agent:build'
 
     // Use the test source set
@@ -73,6 +73,61 @@ tasks.register('integrationTest', Test) {
     }
 
     // Allow test failures to not fail the build (for CI purposes)
-    // Remove this if you want the build to fail on test failures
     ignoreFailures = true
+}
+
+// 安装 Allure 命令行工具并生成报告
+tasks.register('installAllure') {
+    group = 'integration'
+    description = 'Install Allure command line tool'
+    doLast {
+        def allureVersion = '2.24.0'
+        def allureZip = "allure-${allureVersion}.zip"
+        def allureUrl = "https://github.com/allure-framework/allure2/releases/download/${allureVersion}/${allureZip}"
+        def allureDir = file("${System.getProperty('user.home')}/.allure")
+
+        if (!allureDir.exists()) {
+            println "Downloading Allure ${allureVersion}..."
+            new File("${System.getProperty('user.home')}/Downloads").mkdirs()
+            def downloadFile = new File("${System.getProperty('user.home')}/Downloads/${allureZip}")
+
+            if (!downloadFile.exists()) {
+                new URL(allureUrl).withInputStream { input ->
+                    downloadFile.withOutputStream { output ->
+                        output << input
+                    }
+                }
+            }
+
+            println "Extracting Allure..."
+            ant.unzip(src: downloadFile, dest: allureDir)
+
+            // 创建符号链接或添加路径
+            def allureBin = new File("${System.getProperty('user.home')}/allure-${allureVersion}/bin")
+            println "Allure installed to: ${allureBin.absolutePath}"
+        }
+    }
+}
+
+tasks.register('generateAllureReport') {
+    group = 'integration'
+    description = 'Generate Allure report from test results'
+    dependsOn 'integrationTest'
+
+    doLast {
+        def allureDir = file("${System.getProperty('user.home')}/allure-2.24.0")
+        def allureBat = new File(allureDir, "bin/allure.bat")
+
+        if (allureBat.exists()) {
+            println "Generating Allure report..."
+            exec {
+                workingDir 'integration-test/build'
+                commandLine allureBat.absolutePath, 'generate', 'allure-results', '-o', 'allure-report'
+            }
+            println "Allure report generated: ${projectDir}/integration-test/build/allure-report/index.html"
+        } else {
+            println "Allure not found. Please run 'gradle installAllure' first or install Allure manually."
+            println "Download from: https://github.com/allure-framework/allure2/releases"
+        }
+    }
 }

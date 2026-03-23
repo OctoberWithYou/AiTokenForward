@@ -128,6 +128,8 @@ public class IntegrationTest {
     }
 
     @Test
+    
+    
     void testServerHealthCheck() throws IOException {
         Request request = new Request.Builder()
                 .url(SERVER_URL + "/health")
@@ -142,6 +144,8 @@ public class IntegrationTest {
     }
 
     @Test
+    
+    
     void testChatCompletionsWithValidToken() throws IOException {
         String jsonBody = "{" +
                 "\"model\": \"test-model\"," +
@@ -168,6 +172,8 @@ public class IntegrationTest {
     }
 
     @Test
+    
+    
     void testChatCompletionsWithInvalidToken() throws IOException {
         String jsonBody = "{" +
                 "\"model\": \"test-model\"," +
@@ -189,6 +195,8 @@ public class IntegrationTest {
     }
 
     @Test
+    
+    
     void testChatCompletionsWithoutToken() throws IOException {
         String jsonBody = "{" +
                 "\"model\": \"test-model\"," +
@@ -208,6 +216,8 @@ public class IntegrationTest {
     }
 
     @Test
+    
+    
     void testEmbeddingsWithValidToken() throws IOException {
         String jsonBody = "{" +
                 "\"model\": \"test-model\"," +
@@ -233,6 +243,8 @@ public class IntegrationTest {
     }
 
     @Test
+    
+    
     void testListModels() throws IOException {
         Request request = new Request.Builder()
                 .url(SERVER_URL + "/v1/models")
@@ -252,6 +264,8 @@ public class IntegrationTest {
     }
 
     @Test
+    
+    
     void testServerNotFound() throws IOException {
         Request request = new Request.Builder()
                 .url(SERVER_URL + "/nonexistent")
